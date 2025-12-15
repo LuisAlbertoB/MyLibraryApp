@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -40,9 +41,124 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.dispose();
   }
 
+  Future<bool> _showExitConfirmation() async {
+    // Show dialog
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.transparent, // We handle blur manually if needed, or use proper blur barrier
+      builder: (context) {
+        return Stack(
+           children: [
+             // Blur Effect
+             Positioned.fill(
+               child: BackdropFilter(
+                 filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                 child: Container(
+                   color: Colors.black.withOpacity(0.3),
+                 ),
+               ),
+             ),
+             // Dialog
+             Center(
+               child: Container(
+                 margin: const EdgeInsets.symmetric(horizontal: 32),
+                 padding: const EdgeInsets.all(24),
+                 decoration: BoxDecoration(
+                   color: const Color(0xFF2d3436),
+                   borderRadius: BorderRadius.circular(16),
+                   border: Border.all(color: Colors.white24),
+                   boxShadow: [
+                     BoxShadow(
+                       color: Colors.black.withOpacity(0.5),
+                       blurRadius: 16,
+                       spreadRadius: 4,
+                     ),
+                   ],
+                 ),
+                 child: Column(
+                   mainAxisSize: MainAxisSize.min,
+                   children: [
+                     const Icon(Icons.menu_book, color: Colors.white, size: 48),
+                     const SizedBox(height: 16),
+                     const Text(
+                       '¿Deseas salir?',
+                       style: TextStyle(
+                         color: Colors.white,
+                         fontSize: 20, 
+                         fontWeight: FontWeight.bold,
+                         decoration: TextDecoration.none
+                       ),
+                       textAlign: TextAlign.center,
+                     ),
+                     const SizedBox(height: 12),
+                     const Text(
+                       'Deseo continuar leyendo o prefiero salir, mi progreso se guardara',
+                       style: TextStyle(
+                         color: Colors.white70,
+                         fontSize: 14,
+                         decoration: TextDecoration.none,
+                         fontWeight: FontWeight.normal
+                       ),
+                       textAlign: TextAlign.center,
+                     ),
+                     const SizedBox(height: 24),
+                     Row(
+                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                       children: [
+                         // Continue Button
+                         TextButton(
+                           onPressed: () => Navigator.of(context).pop(false),
+                           style: TextButton.styleFrom(
+                             foregroundColor: Colors.white70,
+                           ),
+                           child: const Text('Continuar'),
+                         ),
+                         // Exit Button
+                         ElevatedButton.icon(
+                           onPressed: () => Navigator.of(context).pop(true),
+                           style: ElevatedButton.styleFrom(
+                             backgroundColor: Colors.redAccent,
+                             foregroundColor: Colors.white,
+                             shape: RoundedRectangleBorder(
+                               borderRadius: BorderRadius.circular(8),
+                             ),
+                           ),
+                           icon: const Icon(Icons.exit_to_app, size: 18),
+                           label: const Text('Salir'),
+                         ),
+                       ],
+                     )
+                   ],
+                 ),
+               ),
+             ),
+           ],
+        );
+      },
+    );
+
+    return shouldExit ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        final shouldExit = await _showExitConfirmation();
+        if (shouldExit && context.mounted) {
+          // Close document and navigate back
+           final provider = context.read<ReaderProvider>();
+           await provider.closeDocument();
+           if (context.mounted) {
+             Navigator.of(context).pop();
+           }
+        }
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: Consumer<ReaderProvider>(
         builder: (context, provider, _) {
@@ -53,7 +169,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           }
 
           if (provider.error != null && provider.currentPageImage == null) {
-            return Center(
+             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -120,9 +236,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                               IconButton(
                                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                                 onPressed: () async {
-                                  await provider.closeDocument();
+                                  // Trigger system back handling which calls onPopInvoked
                                   if (context.mounted) {
-                                    Navigator.of(context).pop();
+                                     Navigator.of(context).maybePop();
                                   }
                                 },
                               ),
@@ -226,6 +342,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }
