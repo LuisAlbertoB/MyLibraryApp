@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../model/entities/library_item.dart';
 import '../../../model/models/library_item_model.dart';
 import '../../../services/database_service.dart';
@@ -96,6 +97,9 @@ class LibraryProvider with ChangeNotifier {
 
       // Reload from database
       await loadItems();
+      
+      // Start background thumbnail generation
+      _generateMissingThumbnails();
     } catch (e) {
       _error = 'Error scanning library: $e';
     } finally {
@@ -134,13 +138,70 @@ class LibraryProvider with ChangeNotifier {
         type: itemType,
         totalPages: totalPages,
         currentPage: 0,
-        thumbnailPath: null, // Will be generated on demand
+        thumbnailPath: null,
       );
 
       // Save to database
       await _databaseService.insertItem(item);
     } catch (e) {
       print('Error processing file ${file.path}: $e');
+    }
+  }
+
+  /// Generate thumbnails for items that don't have one
+  Future<void> _generateMissingThumbnails() async {
+    final itemsWithoutThumbnail = _items.where((i) => i.thumbnailPath == null).toList();
+    
+    for (final item in itemsWithoutThumbnail) {
+      // Check if we are still scanning or if app is disposed (omitted for brevity)
+      
+      try {
+        // Significant delay to allow UI to render and GC to run
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        final thumbnailPath = await _generateThumbnail(item);
+        if (thumbnailPath != null) {
+          final updatedItem = item.copyWith(thumbnailPath: thumbnailPath);
+          await _databaseService.updateItem(updatedItem);
+          
+          // Update local list in place to avoid full reload
+          final index = _items.indexWhere((i) => i.id == item.id);
+          if (index != -1) {
+            _items[index] = updatedItem;
+            notifyListeners(); // Notify for each thumbnail update
+          }
+        }
+      } catch (e) {
+        print('Error generating thumbnail for ${item.fileName}: $e');
+      }
+    }
+  }
+
+  /// Generate and save thumbnail for an item
+  Future<String?> _generateThumbnail(LibraryItemModel item) async {
+    try {
+      Uint8List? thumbBytes;
+      if (item.isBook) {
+        thumbBytes = await _pdfService.generateThumbnail(item.filePath);
+      } else {
+        thumbBytes = await _cbrService.generateThumbnail(item.filePath);
+      }
+
+      if (thumbBytes == null || thumbBytes.isEmpty) return null;
+
+      final appDir = await getApplicationDocumentsDirectory();
+      final thumbDir = Directory('${appDir.path}/thumbnails');
+      if (!await thumbDir.exists()) {
+        await thumbDir.create(recursive: true);
+      }
+
+      final thumbFile = File('${thumbDir.path}/${item.id}.png');
+      await thumbFile.writeAsBytes(thumbBytes);
+      
+      return thumbFile.path;
+    } catch (e) {
+      print('Error generating thumbnail for ${item.fileName}: $e');
+      return null;
     }
   }
 

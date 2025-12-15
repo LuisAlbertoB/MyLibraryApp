@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'view/pages/setup_screen.dart';
 import 'view/pages/library_screen.dart';
 import 'viewmodel/providers/setup_provider.dart';

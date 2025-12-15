@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../model/entities/library_item.dart';
 
@@ -46,14 +47,22 @@ class LibraryItemWidget extends StatelessWidget {
                       topLeft: Radius.circular(16),
                       bottomLeft: Radius.circular(16),
                     ),
+                    image: item.thumbnailPath != null
+                        ? DecorationImage(
+                            image: FileImage(File(item.thumbnailPath!)),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  child: Center(
-                    child: Icon(
-                      item.isBook ? Icons.menu_book : Icons.auto_stories,
-                      color: color,
-                      size: 28,
-                    ),
-                  ),
+                  child: item.thumbnailPath == null
+                      ? Center(
+                          child: Icon(
+                            item.isBook ? Icons.menu_book : Icons.auto_stories,
+                            color: color,
+                            size: 28,
+                          ),
+                        )
+                      : null,
                 ),
                 // Content
                 Expanded(
