@@ -5,6 +5,7 @@ import 'view/pages/library_screen.dart';
 import 'viewmodel/providers/setup_provider.dart';
 import 'viewmodel/providers/library_provider.dart';
 import 'viewmodel/providers/reader_provider.dart';
+import 'view/widgets/inactivity_detector.dart';
 
 /// Main application widget with Provider configuration.
 class MyApp extends StatelessWidget {
@@ -99,9 +100,13 @@ class _AppRouterState extends State<_AppRouter> {
     final setupProvider = context.watch<SetupProvider>();
     
     if (!setupProvider.setupComplete) {
-      return SetupScreen(onSetupComplete: _onSetupComplete);
+      return InactivityDetector(
+        child: SetupScreen(onSetupComplete: _onSetupComplete),
+      );
     }
 
-    return const LibraryScreen();
+    return InactivityDetector(
+      child: const LibraryScreen(),
+    );
   }
 }
