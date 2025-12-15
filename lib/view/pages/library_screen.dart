@@ -213,11 +213,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
   }
 
-  void _openReader(BuildContext context, LibraryItem item) {
-    Navigator.of(context).push(
+  Future<void> _openReader(BuildContext context, LibraryItem item) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ReaderScreen(item: item),
       ),
     );
+    // Refresh items to update progress bars
+    if (context.mounted) {
+      context.read<LibraryProvider>().loadItems();
+    }
   }
 }
