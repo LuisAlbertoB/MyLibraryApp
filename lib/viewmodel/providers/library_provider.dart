@@ -1,0 +1,177 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import '../../../model/entities/library_item.dart';
+import '../../../model/models/library_item_model.dart';
+import '../../../services/database_service.dart';
+import '../../../services/file_scanner_service.dart';
+import '../../../services/pdf_service.dart';
+import '../../../services/cbr_service.dart';
+
+/// Filter options for library view
+enum LibraryFilter { all, books, comics }
+
+/// Provider for library management and state.
+class LibraryProvider with ChangeNotifier {
+  final DatabaseService _databaseService = DatabaseService();
+  final FileScannerService _fileScannerService = FileScannerService();
+  final PdfService _pdfService = PdfService();
+  final CbrService _cbrService = CbrService();
+
+  List<LibraryItemModel> _items = [];
+  LibraryFilter _filter = LibraryFilter.all;
+  bool _isScanning = false;
+  String? _error;
+  String? _libraryPath;
+
+  // Getters
+  List<LibraryItem> get items => _items;
+  LibraryFilter get filter => _filter;
+  bool get isScanning => _isScanning;
+  String? get error => _error;
+  String? get libraryPath => _libraryPath;
+
+  /// Get filtered items based on current filter
+  List<LibraryItem> get filteredItems {
+    switch (_filter) {
+      case LibraryFilter.books:
+        return _items.where((item) => item.isBook).toList();
+      case LibraryFilter.comics:
+        return _items.where((item) => item.isComic).toList();
+      case LibraryFilter.all:
+        return _items;
+    }
+  }
+
+  /// Counts for UI
+  int get totalCount => _items.length;
+  int get booksCount => _items.where((item) => item.isBook).length;
+  int get comicsCount => _items.where((item) => item.isComic).length;
+
+  /// Set library path
+  void setLibraryPath(String path) {
+    _libraryPath = path;
+  }
+
+  /// Set filter
+  void setFilter(LibraryFilter newFilter) {
+    _filter = newFilter;
+    notifyListeners();
+  }
+
+  /// Load items from database
+  Future<void> loadItems() async {
+    try {
+      _items = await _databaseService.getAllItems();
+      notifyListeners();
+    } catch (e) {
+      _error = 'Error loading items: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Scan library directory and update database
+  Future<void> scanLibrary() async {
+    if (_libraryPath == null) {
+      _error = 'Library path not set';
+      notifyListeners();
+      return;
+    }
+
+    _isScanning = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      // Scan directory for files
+      final files = await _fileScannerService.scanDirectory(_libraryPath!);
+      final filePaths = files.map((f) => f.path).toList();
+
+      // Remove items no longer in directory
+      await _databaseService.deleteItemsNotIn(filePaths);
+
+      // Process each file
+      for (final file in files) {
+        await _processFile(file);
+      }
+
+      // Reload from database
+      await loadItems();
+    } catch (e) {
+      _error = 'Error scanning library: $e';
+    } finally {
+      _isScanning = false;
+      notifyListeners();
+    }
+  }
+
+  /// Process a single file
+  Future<void> _processFile(File file) async {
+    try {
+      // Check if already in database
+      final existing = await _databaseService.getItemByPath(file.path);
+      if (existing != null) {
+        // Already processed
+        return;
+      }
+
+      final fileName = file.path.split('/').last;
+      final isPdf = _fileScannerService.isPdf(file.path);
+      final itemType = isPdf ? ItemType.book : ItemType.comic;
+
+      // Get page count
+      int totalPages = 0;
+      if (isPdf) {
+        totalPages = await _pdfService.getPageCount(file.path);
+      } else {
+        totalPages = await _cbrService.getPageCount(file.path);
+      }
+
+      // Create item
+      final item = LibraryItemModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString() + fileName.hashCode.toString(),
+        filePath: file.path,
+        fileName: fileName,
+        type: itemType,
+        totalPages: totalPages,
+        currentPage: 0,
+        thumbnailPath: null, // Will be generated on demand
+      );
+
+      // Save to database
+      await _databaseService.insertItem(item);
+    } catch (e) {
+      print('Error processing file ${file.path}: $e');
+    }
+  }
+
+  /// Update reading progress for an item
+  Future<void> updateProgress(String itemId, int currentPage) async {
+    try {
+      await _databaseService.updateProgress(itemId, currentPage);
+      
+      // Update local list
+      final index = _items.indexWhere((item) => item.id == itemId);
+      if (index != -1) {
+        _items[index] = _items[index].copyWith(currentPage: currentPage);
+        notifyListeners();
+      }
+    } catch (e) {
+      _error = 'Error updating progress: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Get item by ID
+  LibraryItem? getItemById(String id) {
+    try {
+      return _items.firstWhere((item) => item.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Refresh library (rescan)
+  Future<void> refresh() async {
+    await scanLibrary();
+  }
+}

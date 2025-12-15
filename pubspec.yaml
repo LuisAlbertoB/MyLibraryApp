@@ -1,0 +1,44 @@
+name: flutter_application_1
+description: "Mini Reader - PDF and CBR comic book reader"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  
+  # State Management
+  provider: ^6.1.5
+  
+  # Permissions and Files
+  permission_handler: ^11.3.1
+  file_picker: ^8.0.6
+  path_provider: ^2.1.4
+  
+  # PDF Rendering
+  pdfrx: ^1.3.5
+  
+  # Archive handling (CBR/CBZ)
+  archive: ^3.6.1
+  
+  # Database
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  
+  # Preferences
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
