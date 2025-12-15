@@ -113,4 +113,56 @@ class DatabaseService {
       whereArgs: paths,
     );
   }
+
+  /// Remove duplicates (keep only one entry per file_path)
+  /// This is needed to clean up legacy data with random IDs
+  Future<void> removeDuplicates() async {
+    final db = await database;
+    // Delete rows where id is NOT the one we want to keep?
+    // Hard to do complex logic in one query without deterministic knowledge.
+    // Simpler: grouped by file path, keep LIMIT 1
+    
+    // Get all paths having count > 1
+    final duplicates = await db.rawQuery('''
+      SELECT file_path, COUNT(*) as c 
+      FROM $_tableName 
+      GROUP BY file_path 
+      HAVING c > 1
+    ''');
+    
+    for (final row in duplicates) {
+      final path = row['file_path'] as String;
+      // Get all items for this path
+      final items = await db.query(
+        _tableName,
+        where: 'file_path = ?',
+        whereArgs: [path],
+      );
+      
+      // Heuristic: Keep the one where ID matches path.hashCode, or just the last one
+      // Actually, if we have deterministic IDs now, we should keep the one that matches that ID format if possible,
+      // or just keep any valid one.
+      
+      // Let's just keep the last inserted one (if we had timestamp) or just the first one.
+      // Better: Delete ALL and let scanner re-add correct one? No, we lose progress.
+      
+      // Strategy: Keep the one with the highest current_page (progress)
+      
+      var bestItem = items.first;
+      for (var item in items) {
+        final bestPage = bestItem['current_page'] as int;
+        final currPage = item['current_page'] as int;
+        if (currPage > bestPage) {
+          bestItem = item;
+        }
+      }
+      
+      // Delete others
+      for (var item in items) {
+        if (item['id'] != bestItem['id']) {
+          await db.delete(_tableName, where: 'id = ?', whereArgs: [item['id']]);
+        }
+      }
+    }
+  }
 }

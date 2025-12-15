@@ -92,6 +92,9 @@ class LibraryProvider with ChangeNotifier {
       // Scan directory for files
       final files = await _fileScannerService.scanDirectory(_libraryPath!);
       final filePaths = files.map((f) => f.path).toList();
+      
+      // Clean up duplicates
+      await _databaseService.removeDuplicates();
 
       // Remove items no longer in directory
       await _databaseService.deleteItemsNotIn(filePaths);
