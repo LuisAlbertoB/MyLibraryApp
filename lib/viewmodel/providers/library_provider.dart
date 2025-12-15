@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../model/entities/library_item.dart';
@@ -67,6 +69,7 @@ class LibraryProvider with ChangeNotifier {
   /// Load items from database
   Future<void> loadItems() async {
     try {
+      await _loadFolderColors(); // Load custom colors first
       _items = await _databaseService.getAllItems();
       _buildTree(); // Rebuild tree from flat list
       notifyListeners();
@@ -235,7 +238,52 @@ class LibraryProvider with ChangeNotifier {
     }
   }
 
+  Map<String, int> _folderColors = {};
+
+  /// Load folder colors from preferences
+  Future<void> _loadFolderColors() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? jsonStr = prefs.getString('folder_colors_json');
+      if (jsonStr != null) {
+         final Map<String, dynamic> decoded = jsonDecode(jsonStr);
+         _folderColors = decoded.map((key, value) => MapEntry(key, value as int));
+      }
+    } catch (e) {
+      print('Error loading folder colors: $e');
+    }
+  }
+
+  /// Save folder colors to preferences
+  Future<void> _saveFolderColors() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String jsonStr = jsonEncode(_folderColors);
+      await prefs.setString('folder_colors_json', jsonStr);
+    } catch (e) {
+      print('Error saving folder colors: $e');
+    }
+  }
+
+  /// Update folder color and persist
+  Future<void> updateFolderColor(String folderName, Color newColor) async {
+    try {
+       _folderColors[folderName] = newColor.value; // Store as ARGB int
+       await _saveFolderColors();
+       _buildTree(); // Rebuild tree to apply colors
+       notifyListeners();
+    } catch (e) {
+      print('Error updating folder color: $e');
+    }
+  }
+
   Color _getFolderColor(String name) {
+    // Check if custom color exists
+    if (_folderColors.containsKey(name)) {
+      return Color(_folderColors[name]!);
+    }
+    
+    // Default deterministic color
     final colors = [
       Colors.amber,
       Colors.orange,
