@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../model/entities/library_item.dart';
+import '../../../model/entities/folder_node.dart';
 import '../../../model/models/library_item_model.dart';
 import '../../../services/database_service.dart';
 import '../../../services/file_scanner_service.dart';
@@ -19,6 +21,8 @@ class LibraryProvider with ChangeNotifier {
   final CbrService _cbrService = CbrService();
 
   List<LibraryItemModel> _items = [];
+  FolderNode? _rootNode; // Logic root for tree view
+  
   LibraryFilter _filter = LibraryFilter.all;
   bool _isScanning = false;
   String? _error;
@@ -26,6 +30,7 @@ class LibraryProvider with ChangeNotifier {
 
   // Getters
   List<LibraryItem> get items => _items;
+  FolderNode? get rootNode => _rootNode;
   LibraryFilter get filter => _filter;
   bool get isScanning => _isScanning;
   String? get error => _error;
@@ -63,6 +68,7 @@ class LibraryProvider with ChangeNotifier {
   Future<void> loadItems() async {
     try {
       _items = await _databaseService.getAllItems();
+      _buildTree(); // Rebuild tree from flat list
       notifyListeners();
     } catch (e) {
       _error = 'Error loading items: $e';
@@ -131,8 +137,10 @@ class LibraryProvider with ChangeNotifier {
       }
 
       // Create item
+      // Use deterministic ID based on file path to avoid duplicates
+      final id = file.path.hashCode.toString();
       final item = LibraryItemModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString() + fileName.hashCode.toString(),
+        id: id,
         filePath: file.path,
         fileName: fileName,
         type: itemType,
@@ -146,6 +154,94 @@ class LibraryProvider with ChangeNotifier {
     } catch (e) {
       print('Error processing file ${file.path}: $e');
     }
+  }
+
+  /// Build directory tree from flat item list
+  void _buildTree() {
+    if (_items.isEmpty || _libraryPath == null) {
+      _rootNode = null;
+      return;
+    }
+
+    // Filter items first if needed, but usually tree shows all and folders hide/show
+    // For now, let's build tree with ALL items, UI can filter
+    
+    // Group items by directory
+    // We assume _libraryPath is the root
+    
+    final root = FolderNode(
+      name: 'Library', 
+      path: _libraryPath!,
+      isExpanded: true,
+      folderColor: Colors.purple.shade200, // Root color
+      subfolders: [],
+      files: [],
+    );
+
+    // Recursively add items
+    for (final item in _items) {
+       _addItemToTree(root, item);
+    }
+    
+    _rootNode = root;
+  }
+
+  /// Recursive helper to add item to tree
+  void _addItemToTree(FolderNode root, LibraryItemModel item) {
+    if (!item.filePath.startsWith(root.path)) return;
+
+    // Relative path from root
+    String relativePath = item.filePath.substring(root.path.length);
+    if (relativePath.startsWith(Platform.pathSeparator)) relativePath = relativePath.substring(1);
+    
+    final parts = relativePath.split(Platform.pathSeparator);
+    // last part is filename
+    
+    if (parts.length == 1) {
+      // It's a file in this folder
+      root.files.add(item);
+    } else {
+      // It's in a subfolder
+      FolderNode current = root;
+      
+      // Navigate/Create folder structure
+      for (int i = 0; i < parts.length - 1; i++) {
+         final part = parts[i];
+         
+         // Find subfolder
+         var next = current.subfolders.firstWhere(
+           (s) => s.name == part,
+           orElse: () {
+             // Create if not exists
+             final newP = '${current.path}${Platform.pathSeparator}$part';
+             final newFolder = FolderNode(
+               name: part, 
+               path: newP,
+               folderColor: _getFolderColor(part),
+               subfolders: [], // Mutable list
+               files: [],      // Mutable list
+             );
+             current.subfolders.add(newFolder);
+             return newFolder;
+           }
+         );
+         current = next;
+      }
+      // Add file to the leaf folder
+      current.files.add(item);
+    }
+  }
+
+  Color _getFolderColor(String name) {
+    final colors = [
+      Colors.amber,
+      Colors.orange,
+      Colors.teal,
+      Colors.cyan,
+      Colors.indigoAccent,
+      Colors.pinkAccent,
+    ];
+    return colors[name.hashCode.abs() % colors.length];
   }
 
   /// Generate thumbnails for items that don't have one

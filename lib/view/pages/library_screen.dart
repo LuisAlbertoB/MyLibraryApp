@@ -4,6 +4,7 @@ import '../../model/entities/library_item.dart';
 import '../../viewmodel/providers/library_provider.dart';
 import '../widgets/library_item_widget.dart';
 import '../widgets/filter_bar_widget.dart';
+import '../widgets/folder_widget.dart';
 import 'reader_screen.dart';
 
 /// Library screen showing all books and comics.
@@ -146,9 +147,42 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
     }
 
+    // List View for specific filters
     final items = provider.filteredItems;
     
+    // Tree View for "All" filter
+    if (provider.filter == LibraryFilter.all && provider.rootNode != null) {
+       if (provider.rootNode!.totalItems == 0) {
+          return _buildEmptyState(context, provider);
+       }
+       
+       return SingleChildScrollView(
+         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+         child: FolderWidget(
+           node: provider.rootNode!,
+           onItemTap: (item) => _openReader(context, item),
+         ),
+       );
+    }
+    
     if (items.isEmpty) {
+      return _buildEmptyState(context, provider);
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return LibraryItemWidget(
+          item: item,
+          onTap: () => _openReader(context, item),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, LibraryProvider provider) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -177,19 +211,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ],
         ),
       );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return LibraryItemWidget(
-          item: item,
-          onTap: () => _openReader(context, item),
-        );
-      },
-    );
   }
 
   void _openReader(BuildContext context, LibraryItem item) {
